@@ -1,13 +1,14 @@
 package ansicsi
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCSI(t *testing.T) {
-	bytes := []byte("\x1b[38;5;128m\x1b[1mHello, world!\x1b[0m")
+	input := []byte("\x1b[38;5;128m\x1b[1mHello, world!\x1b[0m")
 
 	expected := []struct {
 		size int
@@ -30,19 +31,28 @@ func TestCSI(t *testing.T) {
 		{size: 0},
 		{size: 4, cmd: &SetGraphicsRendition{Command: SGRReset, Parameters: []int{}}},
 	}
-	for ; len(bytes) > 0; expected = expected[1:] {
-		cmd, size := Decode(bytes)
+
+	var buf bytes.Buffer
+	for b := input; len(b) > 0; expected = expected[1:] {
+		cmd, size := Decode(b)
 		if !assert.Equal(t, expected[0].size, size) {
 			return
 		}
 		if size == 0 {
-			bytes = bytes[1:]
+			buf.WriteByte(b[0])
+			b = b[1:]
 			continue
 		}
-		bytes = bytes[size:]
+		b = b[size:]
 
 		if !assert.Equal(t, expected[0].cmd, cmd) {
 			return
 		}
+
+		encodedSize, err := cmd.Encode(&buf)
+		if !assert.NoError(t, err) || !assert.Equal(t, size, encodedSize) {
+			return
+		}
 	}
+	assert.Equal(t, input, buf.Bytes())
 }

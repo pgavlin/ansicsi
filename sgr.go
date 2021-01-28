@@ -1,5 +1,7 @@
 package ansicsi
 
+import "io"
+
 const (
 	SGRReset                   = 0  // Default rendition (implementation-defined), cancels the effect of any preceding occurrence of SGR
 	SGRBold                    = 1  // Bold or increased intensity
@@ -73,6 +75,13 @@ type SetGraphicsRendition struct {
 	Command int
 	// Parameters are the parameters (if any) to the command.
 	Parameters []int
+}
+
+func (sgr *SetGraphicsRendition) Encode(w io.Writer) (int, error) {
+	params := make([]int, 0, len(sgr.Parameters)+1)
+	params = append(params, sgr.Command)
+	params = append(params, sgr.Parameters...)
+	return encodeCommand(w, params, nil, 0x6d)
 }
 
 func (sgr *SetGraphicsRendition) decodeParameters(params []int) bool {

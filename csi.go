@@ -1,11 +1,16 @@
 package ansicsi
 
 import (
+	"bytes"
+	"io"
 	"strconv"
 )
 
 // Command represents a parsed ANSI control function.
 type Command interface {
+	// Encode writes the ANSI CSI and control sequence for the command to the given Writer.
+	Encode(w io.Writer) (int, error)
+
 	decodeParameters(params []int) bool
 }
 
@@ -16,7 +21,16 @@ type ControlSequence struct {
 	Final        byte
 }
 
-func (ControlSequence) decodeParameters(params []int) bool {
+func (cs *ControlSequence) Encode(w io.Writer) (int, error) {
+	bytes := make([]byte, 0, 2+len(cs.Parameters)+len(cs.Intermediate)+1)
+	bytes = append(bytes, []byte("\x1b[")...)
+	bytes = append(bytes, cs.Parameters...)
+	bytes = append(bytes, cs.Intermediate...)
+	bytes = append(bytes, cs.Final)
+	return w.Write(bytes)
+}
+
+func (*ControlSequence) decodeParameters(params []int) bool {
 	return false
 }
 
@@ -289,4 +303,25 @@ func decodeCommand(parameters, intermediate []byte, final byte) (Command, bool) 
 	}
 
 	return cmd, cmd.decodeParameters(params)
+}
+
+func encodeCommand(w io.Writer, parameters []int, intermediate []byte, final byte) (int, error) {
+	// Encode the parameter list.
+	var params bytes.Buffer
+	for i, p := range parameters {
+		if i > 0 {
+			params.WriteByte(';')
+		}
+		if p >= 0 {
+			params.WriteString(strconv.FormatUint(uint64(p), 10))
+		}
+	}
+
+	// Write the CSI + control sequence.
+	cs := ControlSequence{
+		Parameters:   params.Bytes(),
+		Intermediate: intermediate,
+		Final:        final,
+	}
+	return cs.Encode(w)
 }
